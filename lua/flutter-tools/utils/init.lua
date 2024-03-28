@@ -15,7 +15,7 @@ function M.buf_valid(bufnr, name)
   local target = bufnr or name
   if not target then return false end
   if bufnr then return api.nvim_buf_is_loaded(bufnr) end
-  return vim.fn.bufexists(target) > 0 and vim.fn.buflisted(target) > 0
+  return vim.fn.bufexists(target) > 0
 end
 
 local colorscheme_group = api.nvim_create_augroup("FlutterToolsColorscheme", { clear = true })
