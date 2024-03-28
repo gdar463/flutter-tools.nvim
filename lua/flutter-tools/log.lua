@@ -94,7 +94,7 @@ end
 
 function M.__resurrect()
   local buf = api.nvim_get_current_buf()
-  vim.cmd("setfiletype log")
+  vim.cmd("setfiletype flutterlog")
   vim.bo[buf].modifiable = false
   vim.bo[buf].modified = false
   vim.bo[buf].buftype = "nofile"
