@@ -30,7 +30,7 @@ end
 local function create(config)
   local opts = {
     filename = M.filename,
-    filetype = "fugitivelog",
+    filetype = "flutterlog",
     open_cmd = config.open_cmd,
   }
   ui.open_win(opts, function(buf, win)
