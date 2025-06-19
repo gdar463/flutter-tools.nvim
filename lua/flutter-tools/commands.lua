@@ -23,13 +23,15 @@ local current_device = nil
 
 ---@class flutter.Runner
 ---@field is_running fun(runner: flutter.Runner):boolean
----@field run fun(runner: flutter.Runner, paths:table, args:table, cwd:string, on_run_data:fun(is_err:boolean, data:string), on_run_exit:fun(data:string[], args: table, project_conf: flutter.ProjectConfig?,launch_config: dap.Configuration?),  is_flutter_project: boolean, project_conf: flutter.ProjectConfig?, launch_config: dap.Configuration?)
+---@field run fun(runner: flutter.Runner, opts: RunOpts, paths:table, args:table, cwd:string, on_run_data:fun(is_err:boolean, data:string), on_run_exit:fun(data:string[], args: table, opts: RunOpts?, project_conf: flutter.ProjectConfig?,launch_config: dap.Configuration?),  is_flutter_project: boolean, project_conf: flutter.ProjectConfig?, launch_config: dap.Configuration?)
 ---@field cleanup fun(funner: flutter.Runner)
 ---@field send fun(runner: flutter.Runner, cmd:string, quiet: boolean?)
 ---@field attach fun(runner: flutter.Runner, paths:table, args:table, cwd:string, on_run_data:fun(is_err:boolean, data:string), on_run_exit:fun(data:string[], args: table, project_conf: flutter.ProjectConfig?,launch_config: dap.Configuration?))
 
 ---@type flutter.Runner?
 local runner = nil
+
+local fvm_name = path.is_windows and "fvm.bat" or "fvm"
 
 local function use_debugger_runner(force_debug)
   if force_debug or config.debugger.enabled then
@@ -84,9 +86,10 @@ end
 ---Handle a finished flutter run command
 ---@param result string[]
 ---@param cli_args string[]
+---@param opts RunOpts?
 ---@param project_config flutter.ProjectConfig?
 ---@param launch_config dap.Configuration?
-local function on_run_exit(result, cli_args, project_config, launch_config)
+local function on_run_exit(result, cli_args, opts, project_config, launch_config)
   local matched_error, msg = has_recoverable_error(result)
   if matched_error then
     local lines = devices.to_selection_entries(result)
@@ -96,7 +99,10 @@ local function on_run_exit(result, cli_args, project_config, launch_config)
       on_select = function(device)
         vim.list_extend(cli_args, { "-d", device.id })
         if launch_config then vim.list_extend(launch_config.args, { "-d", device.id }) end
-        M.run({ cli_args = cli_args }, project_config, launch_config)
+        opts = opts or {}
+        opts.cli_args = cli_args
+
+        M.run(opts, project_config, launch_config)
       end,
     })
   end
@@ -274,13 +280,25 @@ local function run(opts, project_conf, launch_config)
     -- To determinate if the project is a flutter project we need to check if the pubspec.yaml
     -- file has a flutter dependency in it. We need to get cwd first to pick correct pubspec.yaml file.
     local is_flutter_project = has_flutter_dependency_in_pubspec(cwd)
+    local default_run_args = config.default_run_args
+    local run_args
     if is_flutter_project then
       ui.notify("Starting flutter project...")
+      if default_run_args then run_args = default_run_args.flutter end
     else
       ui.notify("Starting dart project...")
+      if default_run_args then run_args = default_run_args.dart end
+    end
+    if run_args then
+      if type(run_args) == "string" then
+        vim.list_extend(args, vim.split(run_args, " "))
+      elseif type(run_args) == "table" then
+        vim.list_extend(args, run_args)
+      end
     end
     runner = use_debugger_runner(opts.force_debug) and debugger_runner or job_runner
     runner:run(
+      opts,
       paths,
       args,
       cwd,
@@ -312,8 +330,8 @@ end
 local function attach(opts)
   opts = opts or {}
   executable.get(function(paths)
-    local args = opts.cli_args or {}
-    if not use_debugger_runner() then vim.list_extend(args, { "attach" }) end
+    local args = opts.cli_args or opts.args or {}
+    if not use_debugger_runner() then table.insert(args, 1, "attach") end
 
     local cwd = get_cwd()
     ui.notify("Attaching flutter project...")
@@ -325,6 +343,8 @@ end
 --- Attach to a running app
 ---@param opts AttachOpts
 function M.attach(opts)
+  if type(opts) == "string" then opts = { args = opts ~= "" and vim.split(opts, " ") or {} } end
+  opts = opts or {}
   if M.is_running() then return ui.notify("Flutter is already running!") end
   attach(opts)
 end
@@ -487,7 +507,7 @@ local fvm_list_job = nil
 --- Returns table<{name: string, status: active|global|nil}>
 function M.fvm_list(callback)
   if not fvm_list_job then
-    fvm_list_job = Job:new({ command = "fvm", args = { "api", "list" } })
+    fvm_list_job = Job:new({ command = fvm_name, args = { "api", "list" } })
 
     fvm_list_job:after_success(vim.schedule_wrap(function(j)
       local out = j:result()
@@ -526,7 +546,7 @@ local fvm_use_job = nil
 
 function M.fvm_use(sdk_name)
   if not fvm_use_job then
-    fvm_use_job = Job:new({ command = "fvm", args = { "use", sdk_name } })
+    fvm_use_job = Job:new({ command = fvm_name, args = { "use", sdk_name } })
 
     fvm_use_job:after_success(vim.schedule_wrap(function(j)
       ui.notify(utils.join(j:result()))

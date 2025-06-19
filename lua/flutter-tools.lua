@@ -23,9 +23,9 @@ end
 local function setup_commands()
   -- Commands
   command("FlutterRun", function(data) commands.run_command(data.args) end, { nargs = "*" })
-  command("FlutterDebug", function(data) commands.run_command(data.args) end, { nargs = "*" })
+  command("FlutterDebug", function(data) commands.run_command(data.args, true) end, { nargs = "*" })
   command("FlutterLspRestart", lsp.restart)
-  command("FlutterAttach", commands.attach)
+  command("FlutterAttach", function(data) commands.attach(data.args) end, { nargs = "*" })
   command("FlutterDetach", commands.detach)
   command("FlutterReload", commands.reload)
   command("FlutterRestart", commands.restart)
@@ -62,7 +62,7 @@ local function start()
   if not _setup_started then
     _setup_started = true
     setup_commands()
-    if config.debugger.enabled then dap.setup(config) end
+    dap.setup(config)
     if config.widget_guides.enabled then guides.setup() end
     if config.decorations then decorations.apply(config.decorations) end
   end
@@ -118,14 +118,14 @@ local function setup_autocommands()
   })
 end
 
----@param opts flutter.ProjectConfig
+---@param opts flutter.ProjectConfig | flutter.ProjectConfig[] Project-specific configuration
 function M.setup_project(opts)
   config.setup_project(opts)
   start()
 end
 
 ---Entry point for this plugin
----@param user_config table
+---@param user_config flutter.Config Configuration options for flutter-tools
 function M.setup(user_config)
   config.set(user_config)
   setup_autocommands()
